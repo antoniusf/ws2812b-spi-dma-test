@@ -87,16 +87,13 @@ uint8_t *write_byte(uint8_t byte, uint8_t *buffer) {
 // expects you to allocate at least this amount of memory, and then call
 // new_framebuffer with it.
 size_t get_framebuffer_size(size_t num_leds) {
-  size_t spi_buffer_size = num_leds * 3 * SPI_BITS_PER_BIT + NUM_RESET_BYTES + 1;
+  size_t spi_buffer_size = num_leds * 3 * SPI_BITS_PER_BIT + NUM_RESET_BYTES;
   return spi_buffer_size;
 }
 
 // make a new framebuffer. backing_memory must be a pointer to a usable
 // region of memory at least get_framebuffer_size(num_leds) bytes big.
 FrameBuffer new_framebuffer(size_t num_leds, void *backing_memory) {
-
-  *((uint8_t *) backing_memory) = 0;
-  backing_memory++;
 
   // initialize reset bytes
   size_t spi_buffer_size = get_framebuffer_size(num_leds);
@@ -112,13 +109,15 @@ FrameBuffer new_framebuffer(size_t num_leds, void *backing_memory) {
   return fb;
 }
 
+// resets the position of the write index, allowing you to
+// fill the framebuffer with new values
 void clear_framebuffer(FrameBuffer *fb) {
   fb->write_ptr = fb->spi_buffer;
 }
 
 // sets the color of the next led in the chain, up to fb.num_leds.
 // returns -1 if all leds have been set already, 0 otherwise.
-int framebuffer_append_led_color(FrameBuffer *fb, uint8_t red, uint8_t green, uint8_t blue) {
+int framebuffer_push_rgb(FrameBuffer *fb, uint8_t red, uint8_t green, uint8_t blue) {
 
   // // reserve 100 bytes for resetting
   // reserve 100 bytes for resetting
@@ -134,10 +133,10 @@ int framebuffer_append_led_color(FrameBuffer *fb, uint8_t red, uint8_t green, ui
   return 0;
 }
 
-int framebuffer_append_hsv(FrameBuffer *fb, double h, double s, double l) {
+int framebuffer_push_hsv(FrameBuffer *fb, double h, double s, double l) {
     uint8_t r, g, b;
     hsv_to_rgb(h, s, l, &r, &g, &b);
-    return framebuffer_append_led_color(fb, r, g, b);
+    return framebuffer_push_rgb(fb, r, g, b);
 }
 
 /**
@@ -222,7 +221,7 @@ int main(void)
   while (1)
   {
 
-    if (HAL_SPI_Transmit_DMA(&hspi1, framebuffer.spi_buffer, framebuffer.spi_buffer_size-1) != HAL_OK) {
+    if (HAL_SPI_Transmit_DMA(&hspi1, framebuffer.spi_buffer, framebuffer.spi_buffer_size) != HAL_OK) {
       Error_Handler();
     }
 
