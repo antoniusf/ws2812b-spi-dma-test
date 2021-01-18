@@ -63,8 +63,7 @@ void hsv_to_rgb(double h, double s, double l, uint8_t *r, uint8_t *g, uint8_t *b
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// returns number of actual bytes written
-size_t write_byte(uint8_t byte, uint8_t *buffer) {
+uint8_t *write_byte(uint8_t byte, uint8_t *buffer) {
   int expanded = 0;
   for (int i=7; i>=0; i--) {
     expanded <<= 3;
@@ -80,22 +79,15 @@ size_t write_byte(uint8_t byte, uint8_t *buffer) {
   *buffer = expanded >> 16;
   *(buffer + 1) = (expanded >> 8) & 0xFF;
   *(buffer + 2) = expanded & 0xFF;
-  return 3;
+  return buffer + 3;
 }
 
-size_t get_framebuffer_led_section_size(size_t num_leds) {
-    return num_leds * 3 * SPI_BITS_PER_BIT;
-}
-
-size_t get_framebuffer_region_size(size_t num_leds) {
-    return get_framebuffer_led_section_size(num_leds) + NUM_RESET_BYTES;
-}
 
 // returns the size of memory required by the framebuffer. the framebuffer
 // expects you to allocate at least this amount of memory, and then call
 // new_framebuffer with it.
 size_t get_framebuffer_size(size_t num_leds) {
-  size_t spi_buffer_size = (get_framebuffer_led_section_size(num_leds) + NUM_RESET_BYTES) * 2;
+  size_t spi_buffer_size = num_leds * 3 * SPI_BITS_PER_BIT + NUM_RESET_BYTES + 1;
   return spi_buffer_size;
 }
 
@@ -103,21 +95,17 @@ size_t get_framebuffer_size(size_t num_leds) {
 // region of memory at least get_framebuffer_size(num_leds) bytes big.
 FrameBuffer new_framebuffer(size_t num_leds, void *backing_memory) {
 
+  *((uint8_t *) backing_memory) = 0;
+  backing_memory++;
+
   // initialize reset bytes
   size_t spi_buffer_size = get_framebuffer_size(num_leds);
-  size_t led_section_size = get_framebuffer_led_section_size(num_leds);
-  size_t region_size = get_framebuffer_region_size(num_leds);
-
-  void *region_1_start = backing_memory;
-  void *region_2_start = backing_memory + region_size;
-
-  memset(region_1_start + led_section_size, 0, NUM_RESET_BYTES);
-  memset(region_2_start + led_section_size, 0, NUM_RESET_BYTES);
+  memset(backing_memory + spi_buffer_size - NUM_RESET_BYTES, 0, NUM_RESET_BYTES);
 
   FrameBuffer fb = {
     .spi_buffer = (uint8_t *) backing_memory,
     .spi_buffer_size = spi_buffer_size,
-    .write_offset = 0,
+    .write_ptr = (uint8_t *) backing_memory,
     .num_leds = num_leds,
   };
 
@@ -125,31 +113,23 @@ FrameBuffer new_framebuffer(size_t num_leds, void *backing_memory) {
 }
 
 void clear_framebuffer(FrameBuffer *fb) {
-    fb->write_offset = 0;
+  fb->write_ptr = fb->spi_buffer;
 }
 
 // sets the color of the next led in the chain, up to fb.num_leds.
 // returns -1 if all leds have been set already, 0 otherwise.
 int framebuffer_append_led_color(FrameBuffer *fb, uint8_t red, uint8_t green, uint8_t blue) {
 
-  if (fb->write_offset >= get_framebuffer_led_section_size(fb->num_leds)) {
+  // // reserve 100 bytes for resetting
+  // reserve 100 bytes for resetting
+  size_t writable_spi_buffer_size = fb->spi_buffer_size - NUM_RESET_BYTES;
+  if (fb->write_ptr >= (fb->spi_buffer + writable_spi_buffer_size)) {
     return -1;
   }
 
-  uint8_t *region_1 = fb->spi_buffer;
-  uint8_t *region_2 = fb->spi_buffer + get_framebuffer_region_size(fb->num_leds);
-
-  // green
-  write_byte(green, region_2 + fb->write_offset);
-  fb->write_offset += write_byte(0, region_1 + fb->write_offset);
-
-  // red
-  write_byte(red, region_2 + fb->write_offset);
-  fb->write_offset += write_byte(0, region_1 + fb->write_offset);
-
-  // blue
-  write_byte(blue, region_2 + fb->write_offset);
-  fb->write_offset += write_byte(0, region_1 + fb->write_offset);
+  fb->write_ptr = write_byte(green, fb->write_ptr);
+  fb->write_ptr = write_byte(red, fb->write_ptr);
+  fb->write_ptr = write_byte(blue, fb->write_ptr);
 
   return 0;
 }
@@ -227,7 +207,7 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
-  size_t num_leds = 50;
+  size_t num_leds = 100;
   size_t backing_buffer_size = get_framebuffer_size(num_leds);
   void *backing_buffer = alloca(backing_buffer_size);
   FrameBuffer framebuffer = new_framebuffer(num_leds, backing_buffer);

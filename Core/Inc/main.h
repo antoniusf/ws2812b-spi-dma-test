@@ -40,7 +40,7 @@ extern "C" {
 typedef struct FrameBuffer {
   uint8_t *spi_buffer;
   size_t spi_buffer_size;
-  size_t write_offset;
+  uint8_t *write_ptr;
   size_t num_leds;
 } FrameBuffer;
 /* USER CODE END ET */
