@@ -24,16 +24,12 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <alloca.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct FrameBuffer {
-  uint8_t *spi_buffer;
-  size_t spi_buffer_size;
-  uint8_t *write_ptr;
-} FrameBuffer;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -61,7 +57,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
-
+void hsv_to_rgb(double h, double s, double l, uint8_t *r, uint8_t *g, uint8_t *b);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -110,6 +106,7 @@ FrameBuffer new_framebuffer(size_t num_leds, void *backing_memory) {
     .spi_buffer = (uint8_t *) backing_memory,
     .spi_buffer_size = spi_buffer_size,
     .write_ptr = (uint8_t *) backing_memory,
+    .num_leds = num_leds,
   };
 
   return fb;
@@ -135,6 +132,45 @@ int framebuffer_append_led_color(FrameBuffer *fb, uint8_t red, uint8_t green, ui
   fb->write_ptr = write_byte(blue, fb->write_ptr);
 
   return 0;
+}
+
+int framebuffer_append_hsv(FrameBuffer *fb, double h, double s, double l) {
+    uint8_t r, g, b;
+    hsv_to_rgb(h, s, l, &r, &g, &b);
+    return framebuffer_append_led_color(fb, r, g, b);
+}
+
+/**
+ * Converts an HSV color value to RGB. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSV_color_space.
+ * Assumes h, s, and v are contained in the set [0, 1] and
+ * returns r, g, and b in the set [0, 255].
+ *
+ * based on: https://axonflux.com/handy-rgb-to-hsl-and-rgb-to-hsv-color-model-c
+ */
+void hsv_to_rgb(double h, double s, double v, uint8_t *r, uint8_t *g, uint8_t *b) {
+    double i;
+    double f = modf(h*6, &i);
+
+    double p = v * (1 - s);
+    double q = v * (1 - f * s);
+    double t = v * (1 - (1 - f) * s);
+
+    double fr, fg, fb;
+    fr = fg = fb = 0;
+
+    switch((int) i % 6) {
+        case 0: fr = v, fg = t, fb = p; break;
+        case 1: fr = q, fg = v, fb = p; break;
+        case 2: fr = p, fg = v, fb = t; break;
+        case 3: fr = p, fg = q, fb = v; break;
+        case 4: fr = t, fg = p, fb = v; break;
+        case 5: fr = v, fg = p, fb = q; break;
+    }
+
+    *r = fr * 255;
+    *g = fg * 255;
+    *b = fb * 255;
 }
 
 /* USER CODE END 0 */
@@ -176,23 +212,21 @@ int main(void)
   void *backing_buffer = alloca(backing_buffer_size);
   FrameBuffer framebuffer = new_framebuffer(num_leds, backing_buffer);
 
-  clear_framebuffer(&framebuffer);
-  for (int i=0; i<num_leds; i++) {
-    framebuffer_append_led_color(&framebuffer, 128, 0, 0);
-  }
+  void *renderer_data = init_renderer();
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  render_frame(renderer_data, &framebuffer, HAL_GetTick());
   while (1)
   {
 
-    uint8_t one = 65;
-    HAL_SPI_Transmit(&hspi1, &one, 1, 1<<20);
     if (HAL_SPI_Transmit_DMA(&hspi1, framebuffer.spi_buffer, framebuffer.spi_buffer_size-1) != HAL_OK) {
       Error_Handler();
     }
+
+    render_frame(renderer_data, &framebuffer, HAL_GetTick());
 
     while (HAL_SPI_GetState(&hspi1) != HAL_SPI_STATE_READY) {
     }
