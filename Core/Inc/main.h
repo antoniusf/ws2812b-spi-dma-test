@@ -99,7 +99,7 @@ void render_frame(void *data, FrameBuffer *fb, uint32_t time);
 
 void clear_framebuffer(FrameBuffer *fb);
 int framebuffer_push_rgb(FrameBuffer *fb, uint8_t red, uint8_t green, uint8_t blue);
-int framebuffer_push_hsv(FrameBuffer *fb, double h, double s, double l);
+int framebuffer_push_hsv(FrameBuffer *fb, uint8_t h, uint8_t s, uint8_t l);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

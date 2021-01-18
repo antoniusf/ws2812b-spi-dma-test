@@ -133,43 +133,30 @@ int framebuffer_push_rgb(FrameBuffer *fb, uint8_t red, uint8_t green, uint8_t bl
   return 0;
 }
 
-int framebuffer_push_hsv(FrameBuffer *fb, double h, double s, double l) {
-    uint8_t r, g, b;
-    hsv_to_rgb(h, s, l, &r, &g, &b);
+int framebuffer_push_hsv(FrameBuffer *fb, uint8_t h, uint8_t s, uint8_t v) {
+    /**
+     * Convert an HSV color value to RGB. Conversion formula
+     * adapted from http://en.wikipedia.org/wiki/HSV_color_space.
+     * Assumes h, s, and v are contained in the set [0, 1] and
+     * returns r, g, and b in the set [0, 255].
+     *
+     * based on: https://axonflux.com/handy-rgb-to-hsl-and-rgb-to-hsv-color-model-c
+     */
+
+    uint16_t h6 = h * 6;
+    uint8_t i = h6 >> 8; // integer part
+    uint8_t f = h6 & 0xFF; // fractional part
+
+    uint8_t p = v * (256 - s) >> 8;
+    uint8_t q = v * (256 - ((f * s) >> 8)) >> 8;
+    uint8_t t = v * (256 - (((256 - f) * s) >> 8)) >> 8;
+
+    double select[] = {v, q, p, p, t, v};
+    uint8_t r = select[(int) i % 6];
+    uint8_t g = select[((int) i + 2) % 6];
+    uint8_t b = select[((int) i + 4) % 6];
+
     return framebuffer_push_rgb(fb, r, g, b);
-}
-
-/**
- * Converts an HSV color value to RGB. Conversion formula
- * adapted from http://en.wikipedia.org/wiki/HSV_color_space.
- * Assumes h, s, and v are contained in the set [0, 1] and
- * returns r, g, and b in the set [0, 255].
- *
- * based on: https://axonflux.com/handy-rgb-to-hsl-and-rgb-to-hsv-color-model-c
- */
-void hsv_to_rgb(double h, double s, double v, uint8_t *r, uint8_t *g, uint8_t *b) {
-    double i;
-    double f = modf(h*6, &i);
-
-    double p = v * (1 - s);
-    double q = v * (1 - f * s);
-    double t = v * (1 - (1 - f) * s);
-
-    double fr, fg, fb;
-    fr = fg = fb = 0;
-
-    switch((int) i % 6) {
-        case 0: fr = v, fg = t, fb = p; break;
-        case 1: fr = q, fg = v, fb = p; break;
-        case 2: fr = p, fg = v, fb = t; break;
-        case 3: fr = p, fg = q, fb = v; break;
-        case 4: fr = t, fg = p, fb = v; break;
-        case 5: fr = v, fg = p, fb = q; break;
-    }
-
-    *r = fr * 255;
-    *g = fg * 255;
-    *b = fb * 255;
 }
 
 /* USER CODE END 0 */
